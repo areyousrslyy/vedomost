@@ -1,0 +1,25 @@
+(function(root){
+'use strict';
+const uid=()=>globalThis.crypto?.randomUUID?.()||('id-'+Date.now()+'-'+Math.random().toString(36).slice(2));
+const categories=[{id:'lecture',name:'Лекции',unit:'лекц.',norm:33,weight:2,graded:false},{id:'lab',name:'Лабораторные',unit:'работ',norm:7,weight:2,graded:true},{id:'practice',name:'Практика',unit:'ч',norm:28,weight:4,graded:true},{id:'demo',name:'Демонстрации',unit:'ч',norm:14,weight:2,graded:false}];
+function seed(){
+const students=[{id:'bykova',name:'Быкова Екатерина'},{id:'gerasimchuk',name:'Герасимчук Тимофей',reference:3.559,note:'Контрольный результат Тимофея — 3,559. На скриншоте к прежнему округлённому итогу 3,21 прибавлены 0,34978355. Эта прибавка равна двум лекциям и лабораторной на 8. По внесённым исходным данным результат отличается; контрольное число не подменяет формулу.'},{id:'grigorov',name:'Григоров Ярослав'},{id:'kretov',name:'Кретов Иван'},{id:'pavlov',name:'Павлов Виктор'}];
+let records=[];
+const add=(s,c,q,g,label,note='')=>records.push({id:uid(),studentId:s,categoryId:c,quantity:q,grade:g,label,note,date:''});
+// Итоги на 7 октября, запись 14 октября и последняя лекция из сообщения пользователя.
+for(const [s,q,last14,last] of [['bykova',4,1/3,.5],['gerasimchuk',13,1,1],['grigorov',9,1,1],['kretov',7,0,0],['pavlov',5,1,1]]){
+add(s,'lecture',q,10,'Лекции: итог на 7 октября');if(last14)add(s,'lecture',last14,10,'Лекция 14 октября',s==='bykova'?'На фотографии отмечена 1/3 лекции.':'');if(last)add(s,'lecture',last,10,'Последняя лекция · дополнение пользователя');}
+for(const [s,grades] of [['bykova',[8,8,7]],['gerasimchuk',[8,9,8,10,8]],['grigorov',[10,9,9,8]],['kretov',[9]],['pavlov',[8,10,10]]])grades.forEach((g,i)=>add(s,'lab',1,g,s==='gerasimchuk'&&i===4?'Дополнительная лабораторная':'Лабораторная '+(i+1),s==='bykova'&&i===2?'Исправленная оценка на фото читается как 7; проверьте запись.':''));
+add('bykova','practice',2,9,'Практика: А.М.');add('bykova','practice',2,null,'Практика: дополнительные часы','Итого в журнале 4 часа. Оценка за эти 2 часа неразборчива; для предварительного расчёта принято 10.');
+add('gerasimchuk','practice',7,8.25,'Практика: сводный результат','7 часов, средняя 8,25 — перенесено из таблицы Тимофея. Включает 4 часа инструкций и 3 часа другой практики; повторно инструкции не добавлены.');
+for(const s of ['grigorov','pavlov']){add(s,'practice',2,7,'Инструкции: первый зачёт');add(s,'practice',2,8,'Инструкции: второй зачёт');}
+add('grigorov','practice',1.5,6,'Практика: задачи','Запись 1,5/6 прочитана как 1,5 часа с оценкой 6.');add('grigorov','practice',1,null,'Практика: приём задач','Оценка на фото не указана; предварительно принято 10. Два часа на 8 из переписки уже учтены во втором зачёте инструкций.');
+add('pavlov','practice',2,8,'Практика: задачи','Итог 6 часов в журнале включает 4 часа инструкций и эти 2 часа.');add('pavlov','practice',2,10,'Дополнительная практика: 2 часа на 10');
+for(const [s,q] of [['bykova',4],['gerasimchuk',3],['pavlov',3]])add(s,'demo',q,10,'Демонстрации: итог журнала');
+return {version:1,course:'Физика',target:3.5,categories:structuredClone(categories),students,records,updatedAt:'2026-10-31T17:47:00Z'};
+}
+function stats(data,studentId,category){const rows=data.records.filter(r=>r.studentId===studentId&&r.categoryId===category.id),quantity=rows.reduce((a,r)=>a+r.quantity,0),weighted=rows.reduce((a,r)=>a+r.quantity*(category.graded?(r.grade??10):10),0);return {quantity,average:quantity?weighted/quantity:0,contribution:weighted/10/category.norm*category.weight,uncertain:category.graded&&rows.some(r=>r.grade===null),rows};}
+function total(data,id){return data.categories.reduce((a,c)=>a+stats(data,id,c).contribution,0);}
+function validate(d){if(!d||d.version!==1||!Array.isArray(d.students)||!Array.isArray(d.categories)||!Array.isArray(d.records)||typeof d.course!=='string'||!Number.isFinite(d.target)||d.target<0)throw Error('Неверный формат файла ведомости.');const ids=new Set();for(const a of [...d.students,...d.categories,...d.records]){if(typeof a.id!=='string'||ids.has(a.id))throw Error('Идентификаторы должны быть уникальными.');ids.add(a.id);}for(const s of d.students){if((s.note!==undefined&&typeof s.note!=='string')||(s.reference!==undefined&&s.reference!==null&&(!Number.isFinite(s.reference)||s.reference<0))||typeof s.name!=='string'||!s.name.trim())throw Error('Не указано имя участника.');}for(const c of d.categories){if(typeof c.name!=='string'||typeof c.unit!=='string'||typeof c.graded!=='boolean'||!Number.isFinite(c.norm)||c.norm<=0||!Number.isFinite(c.weight)||c.weight<0)throw Error('Проверьте нормы и коэффициенты.');}for(const r of d.records){if(!d.students.some(s=>s.id===r.studentId)||!d.categories.some(c=>c.id===r.categoryId)||!Number.isFinite(r.quantity)||r.quantity<=0||!(r.grade===null||(Number.isFinite(r.grade)&&r.grade>=0&&r.grade<=10))||typeof r.label!=='string'||(r.note!==undefined&&typeof r.note!=='string')||(r.date!==undefined&&typeof r.date!=='string'))throw Error('Некорректная запись работы.');}return d;}
+root.Ledger={uid,seed,stats,total,validate};if(typeof module!=='undefined')module.exports=root.Ledger;
+})(globalThis);
